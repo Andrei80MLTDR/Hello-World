@@ -1,92 +1,93 @@
 from typing import List, Dict
-import math
+from app.models.dto import Candle
 
-def compute_ema(values: List[float], period: int) -> List[float]:
-    if not values or period <= 0:
-        return []
-    k = 2 / (period + 1)
-    emas: List[float] = []
-    ema_prev = sum(values[:period]) / period
-    emas.extend([math.nan] * (period - 1))
-    emas.append(ema_prev)
-    for price in values[period:]:
-        ema_prev = price * k + ema_prev * (1 - k)
-        emas.append(ema_prev)
-    return emas
 
-def compute_rsi(values: List[float], period: int = 14) -> List[float]:
-    if len(values) < period + 1:
-        return [math.nan] * len(values)
-    gains: List[float] = []
-    losses: List[float] = []
-    for i in range(1, period + 1):
-        diff = values[i] - values[i - 1]
-        gains.append(max(diff, 0))
-        losses.append(max(-diff, 0))
-    avg_gain = sum(gains) / period
-    avg_loss = sum(losses) / period
-    rsis: List[float] = [math.nan] * period
-    for i in range(period + 1, len(values)):
-        diff = values[i] - values[i - 1]
-        gain = max(diff, 0)
-        loss = max(-diff, 0)
-        avg_gain = (avg_gain * (period - 1) + gain) / period
-        avg_loss = (avg_loss * (period - 1) + loss) / period
-        if avg_loss == 0:
-            rs = math.inf
-        else:
-            rs = avg_gain / avg_loss
-        rsi = 100 - (100 / (1 + rs))
-        rsis.append(rsi)
-    while len(rsis) < len(values):
-        rsis.append(math.nan)
-    return rsis
-
-def ta_summary(candles: List[Dict]) -> Dict:
-    if not candles:
+def ta_summary(candles: List[Candle]) -> Dict:
+    """
+    Calculeaza indicatori tehnici: EMA20, EMA50, RSI14, trend
+    Input: lista de Candle objects
+    Output: dict cu indicatori
+    """
+    
+    if not candles or len(candles) < 50:
         return {
-            "trend": "neutral",
-            "trend_score": 0.5,
-            "ema_fast": None,
-            "ema_slow": None,
-            "rsi": None,
+            "trend": "insufficient_data",
+            "trend_score": 0,
+            "ema_fast": 0,
+            "ema_slow": 0,
+            "rsi": 0,
         }
-
-    closes = [c["close"] for c in candles]
-    ema_fast_list = compute_ema(closes, period=20)
-    ema_slow_list = compute_ema(closes, period=50)
-    rsi_list = compute_rsi(closes, period=14)
-
-    ema_fast = ema_fast_list[-1]
-    ema_slow = ema_slow_list[-1]
-    rsi = rsi_list[-1]
-
-    trend_score = 0.5
-    if not math.isnan(ema_fast) and not math.isnan(ema_slow):
-        if ema_fast > ema_slow:
-            trend_score += 0.2
-        elif ema_fast < ema_slow:
-            trend_score -= 0.2
-
-    if not math.isnan(rsi):
-        if rsi > 60:
-            trend_score += 0.2
-        elif rsi < 40:
-            trend_score -= 0.2
-
-    trend_score = max(0.0, min(1.0, trend_score))
-
-    if trend_score > 0.6:
+    
+    # Extrage closes
+    closes = [float(c.close) for c in candles]
+    
+    # Calculeaza EMA20
+    ema_20 = _calculate_ema(closes, 20)
+    
+    # Calculeaza EMA50
+    ema_50 = _calculate_ema(closes, 50)
+    
+    # Calculeaza RSI14
+    rsi_14 = _calculate_rsi(closes, 14)
+    
+    # Determina trend
+    if ema_20 > ema_50 and rsi_14 > 50:
         trend = "bullish"
-    elif trend_score < 0.4:
+        trend_score = 0.7
+    elif ema_20 < ema_50 and rsi_14 < 50:
         trend = "bearish"
+        trend_score = -0.7
     else:
         trend = "neutral"
-
+        trend_score = 0
+    
     return {
         "trend": trend,
         "trend_score": trend_score,
-        "ema_fast": ema_fast,
-        "ema_slow": ema_slow,
-        "rsi": rsi,
+        "ema_fast": round(ema_20, 2),
+        "ema_slow": round(ema_50, 2),
+        "rsi": round(rsi_14, 2),
     }
+
+
+def _calculate_ema(prices: List[float], period: int) -> float:
+    """Calculeaza Exponential Moving Average"""
+    if len(prices) < period:
+        return 0
+    
+    # Multiplier
+    multiplier = 2 / (period + 1)
+    
+    # SMA initial
+    sma = sum(prices[-period:]) / period
+    ema = sma
+    
+    # Aplica EMA pe restul
+    for price in prices[-period + 1:]:
+        ema = price * multiplier + ema * (1 - multiplier)
+    
+    return ema
+
+
+def _calculate_rsi(prices: List[float], period: int = 14) -> float:
+    """Calculeaza Relative Strength Index"""
+    if len(prices) < period + 1:
+        return 0
+    
+    # Calculeaza gains si losses
+    deltas = [prices[i] - prices[i - 1] for i in range(1, len(prices))]
+    
+    gains = [d if d > 0 else 0 for d in deltas]
+    losses = [-d if d < 0 else 0 for d in deltas]
+    
+    # Average gain si loss
+    avg_gain = sum(gains[-period:]) / period
+    avg_loss = sum(losses[-period:]) / period
+    
+    if avg_loss == 0:
+        return 100 if avg_gain > 0 else 0
+    
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    
+    return rsi
