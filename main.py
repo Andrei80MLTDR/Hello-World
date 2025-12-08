@@ -12,7 +12,6 @@ app = FastAPI()
 
 app.include_router(crypto.router)
 app.include_router(news.router)
-app.include_router(econ.router)
 app.include_router(signal.router)
 
 
