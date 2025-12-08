@@ -1,15 +1,45 @@
+from fastapi import APIRouter, HTTPException
+from typing import List
+
 from app.models.dto import PriceResponse, Candle, TASummary
 from app.services.binance_client import get_binance_price
 from app.services.binance_ohlc import get_klines
 from app.services.ta_engine import ta_summary
 
-import os
+router = APIRouter(prefix="/crypto", tags=["crypto"])
 
-BINANCE_API_KEY = os.getenv("BINANCE_API_KEY", "")
-BINANCE_API_SECRET = os.getenv("BINANCE_API_SECRET", "")
 
-COINGECKO_API_KEY = os.getenv("COINGECKO_API_KEY", "")
+@router.get("/price", response_model=PriceResponse)
+async def get_price(symbol: str = "BTCUSDT"):
+    try:
+        price = await get_binance_price(symbol)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Binance price error: {e}")
+    return PriceResponse(symbol=symbol, price=price)
 
-NEWSDATA_API_KEY = os.getenv("NEWSDATA_API_KEY", "")
 
-ECON_API_KEY = os.getenv("ECON_API_KEY", "")
+@router.get("/ohlc", response_model=List[Candle])
+async def get_ohlc(
+    symbol: str = "BTCUSDT",
+    interval: str = "1h",
+    limit: int = 100,
+):
+    try:
+        candles = await get_klines(symbol=symbol, interval=interval, limit=limit)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Binance klines error: {e}")
+    return candles
+
+
+@router.get("/ta-summary", response_model=TASummary)
+async def get_ta_summary(
+    symbol: str = "BTCUSDT",
+    interval: str = "1h",
+    limit: int = 150,
+):
+    try:
+        candles = await get_klines(symbol=symbol, interval=interval, limit=limit)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Binance klines error: {e}")
+    summary = ta_summary(candles)
+    return TASummary(**summary)
