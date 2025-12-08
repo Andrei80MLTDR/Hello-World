@@ -1,11 +1,11 @@
-from typing import List, Dict
+from typing import List, Dict, Union
 from app.models.dto import Candle
 
 
-def ta_summary(candles: List[Candle]) -> Dict:
+def ta_summary(candles: List[Union[Candle, Dict]]) -> Dict:
     """
     Calculeaza indicatori tehnici: EMA20, EMA50, RSI14, trend
-    Input: lista de Candle objects
+    Input: lista de Candle objects SAU dicts
     Output: dict cu indicatori
     """
     
@@ -18,8 +18,22 @@ def ta_summary(candles: List[Candle]) -> Dict:
             "rsi": 0,
         }
     
-    # Extrage closes
-    closes = [float(c.close) for c in candles]
+    # Extrage closes (funcționează cu Candle objects și dicts)
+    closes = []
+    for c in candles:
+        if isinstance(c, dict):
+            closes.append(float(c.get("close", 0)))
+        else:
+            closes.append(float(c.close))
+    
+    if not closes or len(closes) < 50:
+        return {
+            "trend": "insufficient_data",
+            "trend_score": 0,
+            "ema_fast": 0,
+            "ema_slow": 0,
+            "rsi": 0,
+        }
     
     # Calculeaza EMA20
     ema_20 = _calculate_ema(closes, 20)
