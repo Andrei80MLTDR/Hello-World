@@ -19,3 +19,11 @@ class EconEvent(BaseModel):
     actual: Optional[str] = None
     forecast: Optional[str] = None
     previous: Optional[str] = None
+    
+class Candle(BaseModel):
+    open_time: int
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
