@@ -27,3 +27,10 @@ class Candle(BaseModel):
     low: float
     close: float
     volume: float
+
+class TASummary(BaseModel):
+    trend: str
+    trend_score: float
+    ema_fast: float | None
+    ema_slow: float | None
+    rsi: float | None
