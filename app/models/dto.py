@@ -34,3 +34,13 @@ class TASummary(BaseModel):
     ema_fast: float | None
     ema_slow: float | None
     rsi: float | None
+
+class SignalResponse(BaseModel):
+    """Response model pentru /crypto/signal endpoint"""
+    symbol: str
+    interval: str
+    probability: float
+    confidence: float
+    trend: str
+    reasons: List[str]
+    risk_reward: float
