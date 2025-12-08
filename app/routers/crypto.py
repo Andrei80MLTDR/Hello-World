@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from app.models.dto import PriceResponse
 from app.services.binance_client import get_binance_price
-# from app.services.coingecko_client import get_coingecko_price  # pentru fallback ulterior
 
 router = APIRouter(prefix="/crypto", tags=["crypto"])
 
