@@ -101,6 +101,18 @@ async def backtest_simple(
             rsi = float(ta.get("rsi", 50))
             direction = str(signal.get("direction", "neutral")).lower()
 
+        # Trailing stop-loss logic
+        if position == 1 and stop_loss > 0:
+            profit = price - entry_price
+            # Move stop to breakeven when profit >= 1x ATR
+            if profit >= atr and stop_loss < entry_price:
+                stop_loss = entry_price
+            # Trail stop by 0.5x ATR as price moves up
+            elif profit > atr:
+                potential_stop = price - (0.5 * atr)
+                if potential_stop > stop_loss:
+                    stop_loss = potential_stop
+
             # exit logic
         if position == 1 and (direction == "bearish" or rsi > 70 or (stop_loss > 0 and price <= stop_loss) or (take_profit > 0 and price >= take_profit)):                ret = (price - entry_price) / entry_price
                 equity *= (1 + ret)
@@ -123,9 +135,7 @@ async def backtest_simple(
             if position == 0 and direction == "bullish" and rsi < 60 and in_value_area and near_poc and above_vwap and strong_volume:                position = 1
                 entry_price = price
             # Set ATR-based stop-loss and take-profit
-            stop_loss = price - (2 * atr)  # 2x ATR below entry
-            take_profit = price + (3 * atr)  # 3x ATR above entry (1.5:1 R:R)
-
+            take_profit = price + (2 * atr)  # 2x ATR above entry (2:1 R:R)
             # track drawdown
             if equity > peak_equity:
                 peak_equity = equity
