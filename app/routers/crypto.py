@@ -43,3 +43,8 @@ async def get_ta_summary(
         return TASummary(**summary)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"TA analysis error: {e}")
+
+@router.get("/klines")
+async def get_klines(symbol: str, interval: str):
+    return await BinanceService.get_klines(symbol=symbol, interval=interval)
+
