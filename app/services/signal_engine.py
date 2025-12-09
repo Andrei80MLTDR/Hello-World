@@ -1,97 +1,86 @@
-from typing import Dict, List
-from app.models.dto import Candle
+from typing import Dict
+import numpy as np
 
 
-def calculate_signal(ta_data: Dict, candles: List = None) -> Dict:
-    """
-    Converteste TA indicators -> probability de miscare UP/DOWN
-    
-    Input: ta_data = {"trend": "bullish", "ema_fast": X, "ema_slow": Y, "rsi": Z}
-    Output: signal cu probability si reasoning
-    """
-    
-    trend = ta_data.get("trend", "neutral")
-    trend_score = ta_data.get("trend_score", 0)
-    ema_fast = ta_data.get("ema_fast", 0)
-    ema_slow = ta_data.get("ema_slow", 0)
-    rsi = ta_data.get("rsi", 50)
-    
-    # Incepe cu base probability
-    probability = 0.5  # Neutral
-    confidence = 0.5
-    reasons = []
-    
-    # === TREND ANALYSIS ===
-    if trend == "bullish":
-        probability += 0.15
-        confidence += 0.1
-        reasons.append("EMA20 > EMA50 (uptrend)")
-    elif trend == "bearish":
-        probability -= 0.15
-        confidence += 0.1
-        reasons.append("EMA20 < EMA50 (downtrend)")
-    
-    # === RSI ANALYSIS ===
-    if rsi > 70:
-        # Overbought - slight reversal risk
-        probability -= 0.05
-        confidence += 0.05
-        reasons.append(f"RSI {rsi:.1f} (overbought, watch for reversal)")
-    elif rsi > 60:
-        # Strong momentum
-        probability += 0.1
-        confidence += 0.1
-        reasons.append(f"RSI {rsi:.1f} (strong momentum, bullish bias)")
-    elif rsi < 30:
-        # Oversold - potential bounce
-        probability += 0.05
-        confidence += 0.05
-        reasons.append(f"RSI {rsi:.1f} (oversold, watch for bounce)")
-    elif rsi < 40:
-        # Weak momentum
-        probability -= 0.1
-        confidence += 0.1
-        reasons.append(f"RSI {rsi:.1f} (weak momentum, bearish bias)")
-    else:
-        # Neutral zone
-        reasons.append(f"RSI {rsi:.1f} (neutral zone)")
-    
-    # === VOLUME CHECK (optional, daca avem data) ===
-    if candles and len(candles) >= 2:
-        recent_volume = float(candles[-1].get("volume", 0) if isinstance(candles[-1], dict) else candles[-1].volume)
-        prev_volume = float(candles[-2].get("volume", 0) if isinstance(candles[-2], dict) else candles[-2].volume)
-        
-        if recent_volume > prev_volume * 1.2:
-            probability += 0.05
-            confidence += 0.05
-            reasons.append("Volume increasing (conviction)")
-    
-    # === ALIGNMENT STRENGTH ===
-    if trend in ["bullish", "bearish"] and rsi not in range(40, 60):
-        confidence += 0.1
-        reasons.append("Trend and momentum aligned")
-    
-    # === Clamp values to 0-1 ===
-    probability = max(0.0, min(1.0, probability))
-    confidence = max(0.0, min(1.0, confidence))
-    
-    # === Risk/Reward Estimation ===
-    # Simplified: bullish trend with good momentum = better R:R
-    if probability > 0.65:
-        risk_reward = 1.8
-    elif probability > 0.6:
-        risk_reward = 1.5
-    elif probability < 0.35:
-        risk_reward = 2.0
-    elif probability < 0.4:
-        risk_reward = 1.6
-    else:
-        risk_reward = 1.2
-    
-    return {
-        "probability": round(probability, 3),
-        "confidence": round(confidence, 3),
-        "trend": trend,
-        "reasons": reasons,
-        "risk_reward": round(risk_reward, 2),
-    }
+def calculate_signal(ta_data: Dict, current_price: float) -> Dict:
+    try:
+        if not ta_data:
+            return _neutral_signal()
+        rsi = ta_data.get("rsi", 50)
+        macd = ta_data.get("macd", {})
+        stoch = ta_data.get("stochastic", {})
+        cci = ta_data.get("cci", 0)
+        ema_fast = ta_data.get("ema_fast", 0)
+        ema_slow = ta_data.get("ema_slow", 0)
+        bullish_score = 0
+        bearish_score = 0
+        signal_strength = 0
+        if rsi < 30:
+            bullish_score += 2
+            signal_strength += 1
+        elif rsi < 40:
+            bullish_score += 1
+        elif rsi > 70:
+            bearish_score += 2
+            signal_strength += 1
+        elif rsi > 60:
+            bearish_score += 1
+        macd_hist = macd.get("histogram", 0)
+        if macd_hist > 0:
+            bullish_score += 1.5
+            if macd_hist > 0.001:
+                bullish_score += 0.5
+        else:
+            bearish_score += 1.5
+            if macd_hist < -0.001:
+                bearish_score += 0.5
+        signal_strength += 0.5
+        stoch_k = stoch.get("k", 50)
+        stoch_signal = stoch.get("signal", "neutral")
+        if stoch_signal == "oversold":
+            bullish_score += 1.5
+            signal_strength += 0.5
+        elif stoch_signal == "overbought":
+            bearish_score += 1.5
+            signal_strength += 0.5
+        if abs(cci) > 100:
+            signal_strength += 1
+            if cci > 100:
+                bullish_score += 1
+            else:
+                bearish_score += 1
+        if ema_fast > 0 and ema_slow > 0:
+            if ema_fast > ema_slow:
+                bullish_score += 2
+                signal_strength += 1
+            else:
+                bearish_score += 2
+                signal_strength += 1
+        total_score = bullish_score + bearish_score
+        if total_score == 0:
+            return _neutral_signal()
+        bullish_prob = (bullish_score / total_score) * 100
+        if bullish_prob > 65:
+            trend = "BULLISH"
+            probability = min(bullish_prob, 95)
+        elif bullish_prob < 35:
+            trend = "BEARISH"
+            probability = min((100 - bullish_prob), 95)
+        else:
+            trend = "NEUTRAL"
+            probability = 50
+        confidence = min(signal_strength * 10, 100)
+        if trend == "BULLISH":
+            risk_reward = 1.5 + (confidence / 100)
+        elif trend == "BEARISH":
+            risk_reward = 1.5 + (confidence / 100)
+        else:
+            risk_reward = 1.0
+        return {"trend": trend, "probability": round(probability, 1), "confidence": round(confidence, 1), "signal_strength": round(signal_strength, 2), "risk_reward": round(risk_reward, 2), "rsi": round(rsi, 1), "macd_direction": macd.get("direction", "neutral"), "stochastic_signal": stoch_signal, "timestamp": str(np.datetime64('now'))}
+    except Exception as e:
+        print(f"Error calculating signal: {e}")
+        return _neutral_signal()
+
+
+def _neutral_signal() -> Dict:
+    return {"trend": "NEUTRAL", "probability": 50.0, "confidence": 0.0, "signal_strength": 0.0, "risk_reward": 1.0, "rsi": 50.0, "macd_direction": "neutral", "stochastic_signal": "neutral", "timestamp": str(np.datetime64('now'))}
