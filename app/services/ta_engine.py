@@ -197,7 +197,7 @@ def ta_summary(candles: Union[List[Candle], List[Dict]]) -> Dict:
         ema_fast = calculate_ema(closes, 20)
         ema_slow = calculate_ema(closes, 50)
         rsi = calculate_rsi_wilders(closes, period=14)
-            atr = calculate_atr(candles, period=14)
+                atr = calculate_atr(candles, period=14)
         return {"ema_fast": round(ema_fast, 2), "ema_slow": round(ema_slow, 2), "rsi": round(rsi, 2), "macd": calculate_macd(closes), "stochastic": calculate_stochastic(closes, highs, lows), "cci": calculate_cci(closes), "vwap": get_vwap_levels(candles)}, "atr": atr
     except Exception as e:
         print(f"Error in ta_summary: {e}")
