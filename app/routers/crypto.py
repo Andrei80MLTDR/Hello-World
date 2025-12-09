@@ -8,7 +8,6 @@ from app.services.ta_engine import ta_summary
 
 router = APIRouter(prefix="/crypto", tags=["crypto"])
 
-
 @router.get("/price", response_model=PriceResponse)
 async def get_price(symbol: str = "BTCUSDT"):
     try:
@@ -16,7 +15,6 @@ async def get_price(symbol: str = "BTCUSDT"):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Binance price error: {e}")
     return PriceResponse(symbol=symbol, price=price)
-
 
 @router.get("/ohlc", response_model=List[Candle])
 async def get_ohlc(
@@ -29,7 +27,6 @@ async def get_ohlc(
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Binance klines error: {e}")
     return candles
-
 
 @router.get("/ta-summary", response_model=TASummary)
 async def get_ta_summary(
@@ -68,7 +65,7 @@ async def backtest_simple(
         if len(candles) < 100:
             raise HTTPException(status_code=400, detail="Not enough candles for backtest")
 
-        position = 0  # 0 = flat, 1 = long
+        position = 0
         entry_price = 0.0
         equity = 1.0
         peak_equity = 1.0
@@ -82,7 +79,7 @@ async def backtest_simple(
             signal = calculate_signal(window, ta)
 
             price = float(window[-1].close)
-            rsi = ta.get("rsi", 50)
+            rsi = float(ta.get("rsi", 50))
             direction = str(signal.get("direction", "neutral")).lower()
 
             # exit logic
