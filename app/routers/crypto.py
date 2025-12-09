@@ -48,3 +48,80 @@ async def get_ta_summary(
 async def get_klines(symbol: str, interval: str):
     return await BinanceService.get_klines(symbol=symbol, interval=interval)
 
+from fastapi import APIRouter, Query, HTTPException
+from app.services.binance_service import BinanceService
+from app.services.ta_engine import ta_summary
+from app.services.signal_engine import calculate_signal
+
+router = APIRouter(prefix="/crypto", tags=["crypto"])
+
+binance_service = BinanceService()
+
+@router.get("/backtest")
+async def backtest_simple(
+    symbol: str = Query("BTCUSDT"),
+    interval: str = Query("4h"),
+    limit: int = Query(1000, ge=100, le=2000),
+):
+    try:
+        candles = binance_service.get_candles(symbol=symbol, interval=interval, limit=limit)
+        if len(candles) < 100:
+            raise HTTPException(status_code=400, detail="Not enough candles for backtest")
+
+        position = 0  # 0 = flat, 1 = long
+        entry_price = 0.0
+        equity = 1.0
+        peak_equity = 1.0
+        max_dd = 0.0
+        wins = 0
+        losses = 0
+
+        for i in range(50, len(candles)):
+            window = candles[: i + 1]
+            ta = ta_summary(window)
+            signal = calculate_signal(window, ta)
+
+            price = float(window[-1].close)
+            rsi = ta.get("rsi", 50)
+            direction = str(signal.get("direction", "neutral")).lower()
+
+            # exit logic
+            if position == 1 and (direction == "bearish" or rsi > 70):
+                ret = (price - entry_price) / entry_price
+                equity *= (1 + ret)
+                if ret > 0:
+                    wins += 1
+                else:
+                    losses += 1
+                position = 0
+                entry_price = 0.0
+
+            # entry logic
+            if position == 0 and direction == "bullish" and rsi < 60:
+                position = 1
+                entry_price = price
+
+            # track drawdown
+            if equity > peak_equity:
+                peak_equity = equity
+            dd = (peak_equity - equity) / peak_equity
+            if dd > max_dd:
+                max_dd = dd
+
+        trades = wins + losses
+        return {
+            "symbol": symbol,
+            "interval": interval,
+            "candles_used": len(candles),
+            "trades": trades,
+            "wins": wins,
+            "losses": losses,
+            "win_rate_pct": (wins / trades * 100) if trades else 0.0,
+            "final_equity": equity,
+            "total_return_pct": (equity - 1) * 100,
+            "max_drawdown_pct": max_dd * 100,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
