@@ -156,6 +156,37 @@ def get_vwap_levels(candles: Union[List[Candle], List[Dict]]) -> Dict:
         return {"daily": 0, "weekly": 0, "monthly": 0, "quarterly": 0, "yearly": 0}
 
 
+
+def calculate_atr(candles: Union[List[Candle], List[Dict]], period: int = 14) -> float:
+    """Calculate Average True Range (ATR) for volatility-based stop loss"""
+    try:
+        if not candles or len(candles) < period + 1:
+            return 0.0
+        
+        true_ranges = []
+        for i in range(1, len(candles)):
+            high = get_value(candles[i], "high")
+            low = get_value(candles[i], "low")
+            prev_close = get_value(candles[i-1], "close")
+            
+            tr = max(
+                high - low,
+                abs(high - prev_close),
+                abs(low - prev_close)
+            )
+            true_ranges.append(tr)
+        
+        if not true_ranges:
+            return 0.0
+        
+        # Calculate ATR using Wilder's smoothing method
+        atr = sum(true_ranges[:period]) / period
+        for i in range(period, len(true_ranges)):
+            atr = ((atr * (period - 1)) + true_ranges[i]) / period
+        
+        return round(atr, 2)
+    except:
+        return 0.0
 def ta_summary(candles: Union[List[Candle], List[Dict]]) -> Dict:
     try:
         if not candles or len(candles) < 50:
@@ -166,7 +197,8 @@ def ta_summary(candles: Union[List[Candle], List[Dict]]) -> Dict:
         ema_fast = calculate_ema(closes, 20)
         ema_slow = calculate_ema(closes, 50)
         rsi = calculate_rsi_wilders(closes, period=14)
-        return {"ema_fast": round(ema_fast, 2), "ema_slow": round(ema_slow, 2), "rsi": round(rsi, 2), "macd": calculate_macd(closes), "stochastic": calculate_stochastic(closes, highs, lows), "cci": calculate_cci(closes), "vwap": get_vwap_levels(candles)}
+            atr = calculate_atr(candles, period=14)
+        return {"ema_fast": round(ema_fast, 2), "ema_slow": round(ema_slow, 2), "rsi": round(rsi, 2), "macd": calculate_macd(closes), "stochastic": calculate_stochastic(closes, highs, lows), "cci": calculate_cci(closes), "vwap": get_vwap_levels(candles)}, "atr": atr
     except Exception as e:
         print(f"Error in ta_summary: {e}")
-        return {"ema_fast": 0, "ema_slow": 0, "rsi": 50, "macd": {"macd": 0, "signal": 0, "histogram": 0, "direction": "neutral"}, "stochastic": {"k": 50, "d": 50, "signal": "neutral"}, "cci": 0, "vwap": {"daily": 0, "weekly": 0, "monthly": 0, "quarterly": 0, "yearly": 0}}
+        return {"ema_fast": 0, "ema_slow": 0, "rsi": 50, "macd": {"macd": 0, "signal": 0, "histogram": 0, "direction": "neutral"}, "stochastic": {"k": 50, "d": 50, "signal": "neutral"}, "cci": 0, "vwap": {"daily": 0, "weekly": 0, "monthly": 0, "quarterly": 0, "yearly":, "atr": 0 0}}
