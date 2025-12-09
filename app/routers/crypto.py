@@ -68,6 +68,8 @@ async def backtest_simple(
 
         position = 0
         entry_price = 0.0
+            stop_loss = 0.0
+    take_profit = 0.0
         equity = 1.0
         peak_equity = 1.0
         max_dd = 0.0
@@ -95,12 +97,12 @@ async def backtest_simple(
         volume_strength = get_volume_strength(current_volume, avg_volume)
 
             price = float(window[-1].close)
+        atr = float(ta.get("atr", 0))
             rsi = float(ta.get("rsi", 50))
             direction = str(signal.get("direction", "neutral")).lower()
 
             # exit logic
-            if position == 1 and (direction == "bearish" or rsi > 70):
-                ret = (price - entry_price) / entry_price
+        if position == 1 and (direction == "bearish" or rsi > 70 or (stop_loss > 0 and price <= stop_loss) or (take_profit > 0 and price >= take_profit)):                ret = (price - entry_price) / entry_price
                 equity *= (1 + ret)
                 if ret > 0:
                     wins += 1
@@ -108,6 +110,8 @@ async def backtest_simple(
                     losses += 1
                 position = 0
                 entry_price = 0.0
+            stop_loss = 0.0
+            take_profit = 0.0
 
             # entry logic
             # entry logic with Volume Profile filters
@@ -118,6 +122,9 @@ async def backtest_simple(
             
             if position == 0 and direction == "bullish" and rsi < 60 and in_value_area and near_poc and above_vwap and strong_volume:                position = 1
                 entry_price = price
+            # Set ATR-based stop-loss and take-profit
+            stop_loss = price - (2 * atr)  # 2x ATR below entry
+            take_profit = price + (3 * atr)  # 3x ATR above entry (1.5:1 R:R)
 
             # track drawdown
             if equity > peak_equity:
