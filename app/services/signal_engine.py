@@ -1,7 +1,6 @@
 from typing import List, Dict, Union
 from app.models.dto import Candle
 
-
 def calculate_signal(candles: List[Candle], ta: Dict) -> Dict:
     """
     Calculates trading signal based on candles and technical analysis indicators.
@@ -18,10 +17,11 @@ def calculate_signal(candles: List[Candle], ta: Dict) -> Dict:
     rsi = float(ta.get("rsi", 50))
     ema_fast = float(ta.get("ema_fast", 0))
     ema_slow = float(ta.get("ema_slow", 0))
-    macd = float(ta.get("macd", 0))
-    macd_signal = float(ta.get("macd_signal", 0))
-    bb_upper = float(ta.get("bb_upper", 0))
-    bb_lower = float(ta.get("bb_lower", 0))
+    
+    # Extract MACD values from nested dict
+    macd_dict = ta.get("macd", {})
+    macd = float(macd_dict.get("macd", 0)) if isinstance(macd_dict, dict) else 0.0
+    macd_signal = float(macd_dict.get("signal", 0)) if isinstance(macd_dict, dict) else 0.0
     
     # Initialize signal
     direction = "neutral"
@@ -41,19 +41,11 @@ def calculate_signal(candles: List[Candle], ta: Dict) -> Dict:
     elif rsi < 30:
         score += 0.5
     
-    # MACD-based logic (optional)
+    # MACD-based logic
     if macd > macd_signal:
         score += 0.3
     elif macd < macd_signal:
         score -= 0.3
-    
-    # Bollinger Bands logic (optional)
-    if candles:
-        current_close = float(candles[-1].close)
-        if current_close > bb_upper:
-            score -= 0.2
-        elif current_close < bb_lower:
-            score += 0.2
     
     # Clamp score to [-1, 1]
     score = max(-1.0, min(1.0, score))
@@ -66,6 +58,4 @@ def calculate_signal(candles: List[Candle], ta: Dict) -> Dict:
         "ema_slow": round(ema_slow, 2),
         "macd": round(macd, 2),
         "macd_signal": round(macd_signal, 2),
-        "bb_upper": round(bb_upper, 2),
-        "bb_lower": round(bb_lower, 2),
     }
