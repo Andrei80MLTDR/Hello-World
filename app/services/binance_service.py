@@ -23,8 +23,7 @@ class BinanceService:
                 params["endTime"] = end_time
             response = requests.get(f"{self.BASE_URL}/klines", params=params, timeout=10)
             response.raise_for_status()
-            klines = response.json()
-            return klines if klines else []
+            return response.json() if response.json() else []
         except requests.exceptions.RequestException as e:
             print(f"Error fetching klines for {symbol}: {e}")
             return []
@@ -41,8 +40,7 @@ class BinanceService:
         try:
             response = requests.get(f"{self.BASE_URL}/ticker/price", params={"symbol": symbol}, timeout=10)
             response.raise_for_status()
-            data = response.json()
-            return float(data.get("price", 0))
+            return float(response.json().get("price", 0))
         except:
             return None
     
