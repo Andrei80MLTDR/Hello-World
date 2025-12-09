@@ -52,3 +52,20 @@ class BinanceService:
                 continue
 
         return candles
+
+def parse_klines(self, klines_data: list) -> List[Candle]:
+    candles = []
+    for kline in klines_data:
+        try:
+            candle = Candle(
+                open_time=int(kline[0]),
+                open=float(kline[1]),
+                high=float(kline[2]),
+                low=float(kline[3]),
+                close=float(kline[4]),
+                volume=float(kline[5])
+            )
+            candles.append(candle)
+        except (ValueError, IndexError) as e:
+            continue  # Skip invalid klines
+    return candles
