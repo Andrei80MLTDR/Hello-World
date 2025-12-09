@@ -10,7 +10,7 @@ class VolatilityEngine:
         """Calculate log returns from prices"""
         if len(prices) < 2:
             return [0.0]
-        returns = []
+        returns: List[float] = []
         for i in range(1, len(prices)):
             if prices[i - 1] > 0:
                 ret = np.log(prices[i] / prices[i - 1])
@@ -54,6 +54,19 @@ class VolatilityEngine:
         except Exception:
             return VolatilityEngine.calculate_realized_vol(prices)
 
+    @staticmethod
+    def get_volatility_regime(vol: float) -> str:
+        """Classify volatility regime"""
+        if vol < 0.01:
+            return "very_low"
+        if vol < 0.02:
+            return "low"
+        if vol < 0.04:
+            return "moderate"
+        if vol < 0.08:
+            return "high"
+        return "extreme"
+
 
 class KellyFraction:
     """Kelly Criterion for optimal position sizing"""
@@ -72,10 +85,7 @@ class KellyFraction:
             return 0.0
 
     @staticmethod
-    def calculate_kelly_fractional(
-        full_kelly: float,
-        fraction: float = 0.25,
-    ) -> float:
+    def calculate_kelly_fractional(full_kelly: float, fraction: float = 0.25) -> float:
         """Fractional Kelly = f* * fraction (default 1/4 Kelly)"""
         return full_kelly * fraction
 
@@ -127,7 +137,7 @@ class PositionSizer:
                 fraction=kelly_fraction,
             )
 
-            vol_regime = VolatilityEngine.get_volatility_regime(current_vol)  # type: ignore
+            vol_regime = VolatilityEngine.get_volatility_regime(current_vol)
 
             risk_amount = account_size * max_risk_per_trade
             price_distance = abs(entry_price - stop_loss_price)
@@ -139,7 +149,9 @@ class PositionSizer:
 
             position_size = min(account_size * fractional_kelly, risk_based_size)
             actual_risk = (
-                (position_size * price_distance) / account_size if account_size > 0 else 0
+                (position_size * price_distance) / account_size
+                if account_size > 0
+                else 0
             )
 
             ruin_prob = KellyFraction.estimate_ruin_probability(
