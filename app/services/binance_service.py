@@ -74,3 +74,21 @@ class BinanceService:
     def interval_to_minutes(interval: str) -> int:
         intervals = {"1m": 1, "3m": 3, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "2h": 120, "4h": 240, "6h": 360, "8h": 480, "12h": 720, "1d": 1440, "3d": 4320, "1w": 10080, "1M": 43200}
         return intervals.get(interval, 60)
+
+def parse_klines(self, klines_data: list) -> List[Candle]:
+    candles = []
+    for kline in klines_data:
+        try:
+            candle = Candle(
+                open_time=int(kline[0]),
+                open=float(kline[1]),
+                high=float(kline[2]),
+                low=float(kline[3]),
+                close=float(kline[4]),
+                volume=float(kline[5])
+            )
+            candles.append(candle)
+        except (ValueError, IndexError) as e:
+            continue  # Skip invalid klines
+    return candles
+
