@@ -49,6 +49,7 @@ from fastapi import APIRouter, Query, HTTPException
 from app.services.binance_service import BinanceService
 from app.services.ta_engine import ta_summary
 from app.services.signal_engine import calculate_signal
+from app.services.volume_profile_engine import calculate_volume_profile, is_price_near_poc, get_volume_strength
 
 router = APIRouter(prefix="/crypto", tags=["crypto"])
 
