@@ -79,6 +79,21 @@ async def backtest_simple(
             ta = ta_summary(window)
             signal = calculate_signal(window, ta)
 
+                    # Calculate Volume Profile for lookback window (last 100 candles)
+        vol_profile = calculate_volume_profile(window[-100:] if len(window) > 100 else window, num_bins=20)
+        poc = vol_profile.get("poc", 0)
+        vah = vol_profile.get("vah", 0)
+        val = vol_profile.get("val", 0)
+        
+        # Get VWAP from TA
+        vwap_dict = ta.get("vwap", {})
+        vwap_daily = float(vwap_dict.get("daily", 0)) if isinstance(vwap_dict, dict) else 0.0
+        
+        # Calculate average volume for volume strength
+        recent_volumes = [float(c.volume) if hasattr(c, 'volume') else float(c.get('volume', 0)) for c in window[-20:]]        avg_volume = sum(recent_volumes) / len(recent_volumes) if recent_volumes else 1
+        current_volume = float(window[-1].volume) if hasattr(window[-1], 'volume') else float(window[-1].get('volume', 0))
+        volume_strength = get_volume_strength(current_volume, avg_volume)
+
             price = float(window[-1].close)
             rsi = float(ta.get("rsi", 50))
             direction = str(signal.get("direction", "neutral")).lower()
@@ -95,8 +110,13 @@ async def backtest_simple(
                 entry_price = 0.0
 
             # entry logic
-            if position == 0 and direction == "bullish" and rsi < 60:
-                position = 1
+            # entry logic with Volume Profile filters
+            in_value_area = (val <= price <= vah) if (val and vah) else True
+            near_poc = is_price_near_poc(price, poc, threshold_pct=0.02) if poc else True
+            strong_volume = volume_strength in ('high', 'normal')
+            above_vwap = price > vwap_daily if vwap_daily > 0 else True
+            
+            if position == 0 and direction == "bullish" and rsi < 60 and in_value_area and near_poc and above_vwap and strong_volume:                position = 1
                 entry_price = price
 
             # track drawdown
