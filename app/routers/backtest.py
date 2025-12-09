@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Query, HTTPException
-from typing import Dict, List
+from typing import Dict, List, Optional
 import numpy as np
-
+import time
 from app.services.binance_service import BinanceService
 from app.services.ta_engine import ta_summary
 from app.services.signal_engine import calculate_signal
@@ -9,7 +9,6 @@ from app.services.backtest_metrics import calculate_metrics
 
 router = APIRouter(prefix="/backtest", tags=["backtest"])
 binance_service = BinanceService()
-
 
 def run_backtest(candles, rsi_buy: float = 60.0, rsi_sell: float = 70.0, min_window: int = 50):
     """Execută backtest pe candles"""
@@ -43,17 +42,134 @@ def run_backtest(candles, rsi_buy: float = 60.0, rsi_sell: float = 70.0, min_win
             if direction == "bullish" and rsi < rsi_buy:
                 position = 1
                 entry_price = current_price
-    
-    # Close position dacă rămâne deschis
-    if position == 1:
-        final_pnl = (float(candles[-1].close) - entry_price) / entry_price
-        trades.append(final_pnl)
-        equity_curve.append(equity_curve[-1] * (1 + final_pnl))
+        
+        # Close position dacă rămâne deschis
+        if position == 1:
+            final_pnl = (float(candles[-1].close) - entry_price) / entry_price
+            if final_pnl not in trades:
+                trades.append(final_pnl)
+                equity_curve.append(equity_curve[-1] * (1 + final_pnl))
     
     return trades, equity_curve
 
+# ==================== ENDPOINT 6: LARGE-SCALE BACKTEST ====================
+@router.get("/large-scale")
+async def backtest_large_scale(
+    symbols: str = Query("BTCUSDT,ETHUSDT,XRPUSDT"),
+    timeframes: str = Query("4h,1d"),
+    limit: int = Query(2000, ge=500, le=5000),
+    rsi_buy: float = Query(45.0, ge=20, le=80),
+    rsi_sell: float = Query(65.0, ge=20, le=80),
+):
+    """
+    Large-scale backtesting across MULTIPLE symbols and timeframes.
+    Test system limits and performance at scale.
+    
+    Parameters:
+    - symbols: CSV list (BTCUSDT,ETHUSDT,XRPUSDT,ADAUSDT,DOGEUSDT)
+    - timeframes: CSV list (1h,4h,1d,1w)
+    - limit: 500-5000 candles per symbol/timeframe
+    - rsi_buy: Entry signal (lower = more aggressive)
+    - rsi_sell: Exit signal (higher = more aggressive)
+    
+    Example:
+    /backtest/large-scale?symbols=BTCUSDT,ETHUSDT,XRPUSDT&timeframes=4h,1d&limit=2000&rsi_buy=50&rsi_sell=70
+    """
+    start_time = time.time()
+    symbols_list = [s.strip().upper() for s in symbols.split(",")]
+    timeframes_list = [t.strip() for t in timeframes.split(",")]
+    
+    results = {}
+    summary = {"total_tests": 0, "successful": 0, "failed": 0, "best_performers": []}
+    
+    try:
+        for symbol in symbols_list:
+            results[symbol] = {}
+            
+            for tf in timeframes_list:
+                try:
+                    candles = binance_service.get_candles(symbol, tf, limit)
+                    
+                    if len(candles) < 50:
+                        results[symbol][tf] = {"error": f"Insufficient candles: {len(candles)}"}
+                        summary["failed"] += 1
+                        summary["total_tests"] += 1
+                        continue
+                    
+                    trades, equity_curve = run_backtest(candles, rsi_buy, rsi_sell)
+                    metrics = calculate_metrics(trades, equity_curve)
+                    
+                    results[symbol][tf] = metrics
+                    summary["successful"] += 1
+                    summary["total_tests"] += 1
+                    
+                    # Track top performers
+                    pf = metrics.get("profit_factor", 0)
+                    if pf > 1.0:
+                        summary["best_performers"].append({
+                            "symbol": symbol,
+                            "timeframe": tf,
+                            "profit_factor": round(pf, 2),
+                            "total_return_pct": metrics.get("total_return_pct", 0),
+                            "sharpe_ratio": metrics.get("sharpe_ratio", 0),
+                            "max_dd_pct": metrics.get("max_dd_pct", 0),
+                        })
+                
+                except Exception as e:
+                    results[symbol][tf] = {"error": str(e)}
+                    summary["failed"] += 1
+                    summary["total_tests"] += 1
+        
+        # Sort best performers by profit factor
+        summary["best_performers"] = sorted(
+            summary["best_performers"],
+            key=lambda x: x["profit_factor"],
+            reverse=True
+        )[:5]  # Top 5
+        
+        # Calculate aggregate statistics
+        all_profit_factors = []
+        all_returns = []
+        all_sharpe = []
+        all_max_dd = []
+        
+        for symbol_data in results.values():
+            for tf_data in symbol_data.values():
+                if "error" not in tf_data:
+                    all_profit_factors.append(tf_data.get("profit_factor", 0))
+                    all_returns.append(tf_data.get("total_return_pct", 0))
+                    all_sharpe.append(tf_data.get("sharpe_ratio", 0))
+                    all_max_dd.append(tf_data.get("max_dd_pct", 0))
+        
+        aggregate_stats = {
+            "avg_profit_factor": round(np.mean(all_profit_factors), 2) if all_profit_factors else 0,
+            "median_profit_factor": round(np.median(all_profit_factors), 2) if all_profit_factors else 0,
+            "avg_return_pct": round(np.mean(all_returns), 2) if all_returns else 0,
+            "avg_sharpe_ratio": round(np.mean(all_sharpe), 2) if all_sharpe else 0,
+            "avg_max_dd_pct": round(np.mean(all_max_dd), 2) if all_max_dd else 0,
+        }
+        
+        execution_time = time.time() - start_time
+        
+        return {
+            "status": "completed",
+            "config": {
+                "symbols": symbols_list,
+                "timeframes": timeframes_list,
+                "limit": limit,
+                "rsi_buy": rsi_buy,
+                "rsi_sell": rsi_sell,
+            },
+            "summary": summary,
+            "aggregate_stats": aggregate_stats,
+            "results": results,
+            "execution_time_seconds": round(execution_time, 2),
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Backtest error: {str(e)}")
 
-# ==================== ENDPOINT 1: Single Timeframe ====================
+# Keep existing endpoints
 @router.get("/single-tf")
 async def backtest_single_tf(
     symbol: str = Query("BTCUSDT"),
@@ -62,10 +178,7 @@ async def backtest_single_tf(
     rsi_buy: float = Query(60.0, ge=0, le=100),
     rsi_sell: float = Query(70.0, ge=0, le=100),
 ):
-    """Backtest pe un timeframe cu parametri customizabili
-    
-    Example: /backtest/single-tf?symbol=BTCUSDT&interval=4h&limit=1000&rsi_buy=55&rsi_sell=75
-    """
+    """Backtest pe un timeframe cu parametri customizabili"""
     try:
         candles = binance_service.get_candles(symbol, interval, limit)
         if len(candles) < 50:
@@ -86,122 +199,13 @@ async def backtest_single_tf(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-# ==================== ENDPOINT 2: Multi Timeframe ====================
-@router.get("/multi-tf")
-async def backtest_multi_tf(
-    symbol: str = Query("BTCUSDT"),
-    limit: int = Query(1000, ge=100, le=5000),
-    rsi_buy: float = Query(60.0),
-    rsi_sell: float = Query(70.0),
-):
-    """Backtest pe 1h, 4h, 1d - compară timeframe-uri
-    
-    Example: /backtest/multi-tf?symbol=BTCUSDT&limit=1000
-    """
-    timeframes = ["1h", "4h", "1d"]
-    results = {}
-    
-    try:
-        for tf in timeframes:
-            candles = binance_service.get_candles(symbol, tf, limit)
-            if len(candles) < 50:
-                results[tf] = {"error": f"Insufficient candles: {len(candles)}"}
-                continue
-            
-            trades, equity_curve = run_backtest(candles, rsi_buy, rsi_sell)
-            metrics = calculate_metrics(trades, equity_curve)
-            results[tf] = metrics
-        
-        # Find best
-        best_tf = max(
-            [(k, v) for k, v in results.items() if "error" not in v],
-            key=lambda x: x[1].get("profit_factor", 0),
-            default=(None, {})
-        )
-        
-        return {
-            "symbol": symbol,
-            "limit": limit,
-            "timeframes": results,
-            "best_timeframe": best_tf[0],
-            "best_metrics": best_tf[1] if best_tf[0] else None,
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ==================== ENDPOINT 3: Batch Multiple Symbols ====================
-@router.get("/batch")
-async def backtest_batch(
-    symbols: str = Query("BTCUSDT,ETHUSDT"),
-    timeframes: str = Query("4h,1d"),
-    limit: int = Query(1000, ge=100, le=5000),
-    rsi_buy: float = Query(60.0),
-    rsi_sell: float = Query(70.0),
-):
-    """Backtest pe multiple simboluri și timeframe-uri
-    
-    Example: /backtest/batch?symbols=BTCUSDT,ETHUSDT,XRPUSDT&timeframes=4h,1d&limit=1000
-    """
-    symbols_list = [s.strip().upper() for s in symbols.split(",")]
-    timeframes_list = [t.strip() for t in timeframes.split(",")]
-    
-    batch_results = {}
-    
-    try:
-        for symbol in symbols_list:
-            batch_results[symbol] = {}
-            
-            for tf in timeframes_list:
-                try:
-                    candles = binance_service.get_candles(symbol, tf, limit)
-                    if len(candles) < 50:
-                        batch_results[symbol][tf] = {"error": "Insufficient candles"}
-                        continue
-                    
-                    trades, equity_curve = run_backtest(candles, rsi_buy, rsi_sell)
-                    metrics = calculate_metrics(trades, equity_curve)
-                    batch_results[symbol][tf] = metrics
-                except Exception as e:
-                    batch_results[symbol][tf] = {"error": str(e)}
-        
-        # Summary
-        summary = {}
-        for symbol in symbols_list:
-            best_pf = 0
-            best_tf = None
-            for tf, data in batch_results[symbol].items():
-                if "error" not in data:
-                    pf = data.get("profit_factor", 0)
-                    if pf > best_pf:
-                        best_pf = pf
-                        best_tf = tf
-            summary[symbol] = {"best_tf": best_tf, "best_profit_factor": round(best_pf, 2)}
-        
-        return {
-            "symbols": symbols_list,
-            "timeframes": timeframes_list,
-            "limit": limit,
-            "results": batch_results,
-            "summary": summary,
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ==================== ENDPOINT 4: Parameter Optimization ====================
 @router.get("/optimize")
 async def backtest_optimize(
     symbol: str = Query("BTCUSDT"),
     interval: str = Query("4h"),
     limit: int = Query(1000, ge=100, le=5000),
 ):
-    """Testează multiple RSI parameters și returnează best combination
-    
-    Testează: RSI_buy: 30-65, RSI_sell: 65-80
-    Example: /backtest/optimize?symbol=BTCUSDT&interval=4h&limit=1000
-    """
+    """Testează multiple RSI parameters și returnează best combination"""
     results = {}
     
     try:
@@ -209,7 +213,6 @@ async def backtest_optimize(
         if len(candles) < 50:
             raise HTTPException(status_code=400, detail="Insufficient candles")
         
-        # Test toate combinațiile
         for rsi_buy in range(30, 70, 5):
             for rsi_sell in range(65, 85, 5):
                 if rsi_sell <= rsi_buy:
@@ -221,12 +224,10 @@ async def backtest_optimize(
                 key = f"buy_{rsi_buy}_sell_{rsi_sell}"
                 results[key] = metrics
         
-        # Find best
         best = max(results.items(), key=lambda x: x[1].get("profit_factor", 0))
         best_key = best[0]
         best_metrics = best[1]
         
-        # Parse best params
         best_buy = int(best_key.split("_")[1])
         best_sell = int(best_key.split("_")[3])
         
@@ -242,50 +243,6 @@ async def backtest_optimize(
                 "total_return_pct": best_metrics.get("total_return_pct", 0),
             },
             "all_results": results,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ==================== ENDPOINT 5: Quick Stats ====================
-@router.get("/stats")
-async def backtest_quick_stats(
-    symbol: str = Query("BTCUSDT"),
-    interval: str = Query("4h"),
-    limit: int = Query(500, ge=50, le=2000),
-):
-    """Return quick stats fără backtest - doar indicatori pe latest candles
-    
-    Example: /backtest/stats?symbol=BTCUSDT&interval=4h
-    """
-    try:
-        candles = binance_service.get_candles(symbol, interval, limit)
-        if len(candles) < 20:
-            raise HTTPException(status_code=400, detail="Insufficient candles")
-        
-        # Lucrează cu ultimele 100 candles
-        ta = ta_summary(candles[-100:])
-        signal = calculate_signal(candles[-100:], ta)
-        
-        return {
-            "symbol": symbol,
-            "interval": interval,
-            "current_candle": {
-                "open": float(candles[-1].open),
-                "high": float(candles[-1].high),
-                "low": float(candles[-1].low),
-                "close": float(candles[-1].close),
-            },
-            "indicators": {
-                "ema_fast": round(ta.get("ema_fast", 0), 2),
-                "ema_slow": round(ta.get("ema_slow", 0), 2),
-                "rsi": round(ta.get("rsi", 0), 2),
-                "macd": round(ta.get("macd", 0), 4),
-                "signal_line": round(ta.get("signal_line", 0), 4),
-            },
-            "signal": signal,
         }
     except HTTPException:
         raise
