@@ -2,13 +2,18 @@ from fastapi import APIRouter, Query, HTTPException
 from typing import Dict, List, Optional
 import numpy as np
 import time
+import logging
 from app.services.binance_service import BinanceService
 from app.services.ta_engine import ta_summary
 from app.services.signal_engine import calculate_signal
 from app.services.backtest_metrics import calculate_metrics
+from app.services.advanced_statistical_engine import AdvancedStatisticalEngine, StatisticalMetrics
 
 router = APIRouter(prefix="/backtest", tags=["backtest"])
 binance_service = BinanceService()
+
+logger = logging.getLogger(__name__)
+statistical_engine = AdvancedStatisticalEngine(initial_capital=10000.0)
 
 def run_backtest(candles, rsi_buy: float = 60.0, rsi_sell: float = 70.0, min_window: int = 50):
     """Execută backtest pe candles"""
@@ -97,7 +102,37 @@ async def backtest_large_scale(
                         continue
                     
                     trades, equity_curve = run_backtest(candles, rsi_buy, rsi_sell)
-                    metrics = calculate_metrics(trades, equity_curve)
+                    95
+                    (trades, equity_curve)
+                                        
+                    # Calculate advanced statistical metrics
+                    try:
+                        win_rate = metrics.get('win_rate_pct', 0) / 100 if metrics.get('win_rate_pct', 0) > 0 else 0.5
+                        avg_win = metrics.get('avg_win_pct', 0)
+                        avg_loss = abs(metrics.get('avg_loss_pct', 0))
+                        sharpe = metrics.get('sharpe_ratio', 0)
+                        max_dd = abs(metrics.get('max_dd_pct', 0)) / 100 if metrics.get('max_dd_pct', 0) < 0 else 0.325
+                        
+                        adv_metrics = statistical_engine.calculate_adjusted_metrics(
+                            trades=[{'profit_loss': pnl} for pnl in trades] if trades else [],
+                            win_rate=win_rate,
+                            avg_win=avg_win,
+                            avg_loss=avg_loss,
+                            sharpe_ratio=sharpe,
+                            max_drawdown=max_dd
+                        )
+                        
+                        # Merge advanced metrics with base metrics
+                        metrics['kelly_fraction'] = round(adv_metrics.kelly_fraction, 4)
+                        metrics['kelly_position_size'] = round(adv_metrics.kelly_position_size, 2)
+                        metrics['bayesian_probability'] = round(adv_metrics.bayesian_probability, 4)
+                        metrics['lln_confidence'] = round(adv_metrics.lln_confidence, 4)
+                        metrics['clt_normality_pvalue'] = round(adv_metrics.clt_normality_pvalue, 4)
+                        metrics['adjusted_sharpe_ratio'] = round(adv_metrics.adjusted_sharpe_ratio, 2)
+                        metrics['risk_adjusted_dd'] = round(adv_metrics.risk_adjusted_dd * 100, 2)  # Convert to percentage
+                    except Exception as stats_err:
+                        logger.warning(f"Statistical analysis failed: {str(stats_err)}")
+                        metrics['statistical_error'] = str(stats_err)
                     
                     results[symbol][tf] = metrics
                     summary["successful"] += 1
