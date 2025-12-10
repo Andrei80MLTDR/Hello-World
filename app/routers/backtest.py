@@ -8,6 +8,7 @@ from app.services.ta_engine import ta_summary
 from app.services.signal_engine import calculate_signal
 from app.services.backtest_metrics import calculate_metrics
 from app.services.advanced_statistical_engine import AdvancedStatisticalEngine, StatisticalMetrics
+from app.services.monte_carlo_backtest import monte_carlo_backtest_btc
 
 router = APIRouter(prefix="/backtest", tags=["backtest"])
 binance_service = BinanceService()
@@ -281,5 +282,26 @@ async def backtest_optimize(
         }
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
+@router.get("/monte-carlo")
+async def monte_carlo_simulation(num_simulations: int = Query(1000), initial_capital: float = Query(10000)):
+    """
+    Monte Carlo backtest simulation for 50/50 trading game.
+    
+    - **num_simulations**: Number of simulations to run (default: 1000)
+    - **initial_capital**: Starting capital (default: $10,000)
+    - **Risk per trade**: $100
+    - **Reward per trade**: $300
+    - **Expected ratio**: 1:3 Risk/Reward
+    
+    Returns comprehensive statistical analysis of all simulations
+    """
+    try:
+        result = monte_carlo_backtest_btc(num_simulations=num_simulations, initial_capital=initial_capital)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
