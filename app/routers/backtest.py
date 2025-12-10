@@ -379,7 +379,7 @@ async def get_multi_timeframe_signals(symbol: str = "BTCUSDT"):
     Generate signals for 4H, 12H, and 1D timeframes simultaneously.
     Returns all three signals on a single response.
     """
-        import random
+            import random
     # Mock data for testing - using hardcoded prices and signals
     mock_prices = {"4h": 91850.00, "12h": 91900.50, "1d": 91750.25}
     
