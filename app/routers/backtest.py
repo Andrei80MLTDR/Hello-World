@@ -373,7 +373,9 @@ async def get_signal(
 
 
 
-# Multi-timeframe signals endpoint (4H, 12H, 1D)
+# 388
+signals endpoint (4H, 12H, 1D)
+    import random
 @router.get("/multi-timeframe-signals")
 async def get_multi_timeframe_signals(symbol: str = "BTCUSDT"):
     """
