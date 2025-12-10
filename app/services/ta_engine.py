@@ -1,5 +1,6 @@
 from typing import List, Dict, Union
 from app.models.dto import Candle
+import yfinance as yf
 
 
 def safe_float(value) -> float:
@@ -14,6 +15,65 @@ def get_value(item: Union[Candle, Dict], key: str) -> float:
         return safe_float(item.get(key, 0))
     else:
         return safe_float(getattr(item, key, 0))
+
+
+
+def fetch_yahoo_ohlcv(symbol: str, interval: str = "1d", limit: int = 500) -> List[Dict]:
+    """
+    Fetch OHLCV for stocks via yfinance and return list of dicts
+    compatible with Candle / ta_engine.
+    """
+    tf_map = {
+        "1m": "1m",
+        "5m": "5m",
+        "15m": "15m",
+        "1h": "60m",
+        "4h": "240m",
+        "1d": "1d",
+    }
+    yf_interval = tf_map.get(interval, "1d")
+
+    try:
+        df = yf.download(
+            tickers=symbol,
+            period="max",
+            interval=yf_interval,
+            auto_adjust=False,
+            progress=False,
+        ).tail(limit)
+
+        candles: List[Dict] = []
+        for ts, row in df.iterrows():
+            candles.append(
+                {
+                    "open_time": int(ts.timestamp() * 1000),
+                    "open": float(row["Open"]),
+                    "high": float(row["High"]),
+                    "low": float(row["Low"]),
+                    "close": float(row["Close"]),
+                    "volume": float(row["Volume"]),
+                }
+            )
+        return candles
+    except Exception as e:
+        print(f"Error fetching {symbol}: {e}")
+        return []
+
+
+STOCK_SYMBOLS = {"AAPL", "MSFT", "GOOG", "AMZN", "META", "NVDA", "NFLX", "AMD", "TSLA"}
+
+
+def get_ohlcv(symbol: str, interval: str, limit: int) -> List[Dict]:
+    """
+    Route OHLCV requests to appropriate data source.
+    Stocks go to Yahoo, crypto to your existing Binance fetcher.
+    """
+    if symbol.upper() in STOCK_SYMBOLS:
+        return fetch_yahoo_ohlcv(symbol, interval, limit)
+    else:
+        # For now, we only support stocks via yfinance
+        # TODO: Add Binance fetcher here if needed
+        return []
 
 
 def calculate_ema(closes: List[float], period: int) -> float:
