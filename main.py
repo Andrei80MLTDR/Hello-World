@@ -15,6 +15,10 @@ app.include_router(signal.router)
 app.include_router(multi_tf.router)
 app.include_router(backtest.router)
 
+@app.get("/")
+def root():
+    return {"message": "Personal Hedge Fund API - Multi-timeframe Signals Backtesting Engine"}
+
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
