@@ -2,13 +2,11 @@ from typing import List, Dict, Union
 from app.models.dto import Candle
 import yfinance as yf
 
-
 def safe_float(value) -> float:
     try:
         return float(value)
     except:
         return 0.0
-
 
 def get_value(item: Union[Candle, Dict], key: str) -> float:
     if isinstance(item, dict):
@@ -16,13 +14,8 @@ def get_value(item: Union[Candle, Dict], key: str) -> float:
     else:
         return safe_float(getattr(item, key, 0))
 
-
-
 def fetch_yahoo_ohlcv(symbol: str, interval: str = "1d", limit: int = 500) -> List[Dict]:
-    """
-    Fetch OHLCV for stocks via yfinance and return list of dicts
-    compatible with Candle / ta_engine.
-    """
+    """Fetch OHLCV for stocks via yfinance and return list of dicts compatible with Candle / ta_engine."""
     tf_map = {
         "1m": "1m",
         "5m": "5m",
@@ -32,7 +25,6 @@ def fetch_yahoo_ohlcv(symbol: str, interval: str = "1d", limit: int = 500) -> Li
         "1d": "1d",
     }
     yf_interval = tf_map.get(interval, "1d")
-
     try:
         df = yf.download(
             tickers=symbol,
@@ -41,7 +33,6 @@ def fetch_yahoo_ohlcv(symbol: str, interval: str = "1d", limit: int = 500) -> Li
             auto_adjust=False,
             progress=False,
         ).tail(limit)
-
         candles: List[Dict] = []
         for ts, row in df.iterrows():
             candles.append(
@@ -59,22 +50,14 @@ def fetch_yahoo_ohlcv(symbol: str, interval: str = "1d", limit: int = 500) -> Li
         print(f"Error fetching {symbol}: {e}")
         return []
 
-
 STOCK_SYMBOLS = {"AAPL", "MSFT", "GOOG", "AMZN", "META", "NVDA", "NFLX", "AMD", "TSLA"}
 
-
 def get_ohlcv(symbol: str, interval: str, limit: int) -> List[Dict]:
-    """
-    Route OHLCV requests to appropriate data source.
-    Stocks go to Yahoo, crypto to your existing Binance fetcher.
-    """
+    """Route OHLCV requests to appropriate data source. Stocks go to Yahoo, crypto to your existing Binance fetcher."""
     if symbol.upper() in STOCK_SYMBOLS:
         return fetch_yahoo_ohlcv(symbol, interval, limit)
     else:
-        # For now, we only support stocks via yfinance
-        # TODO: Add Binance fetcher here if needed
         return []
-
 
 def calculate_ema(closes: List[float], period: int) -> float:
     if not closes or len(closes) < period:
@@ -87,7 +70,6 @@ def calculate_ema(closes: List[float], period: int) -> float:
         return ema
     except:
         return closes[-1] if closes else 0
-
 
 def calculate_rsi_wilders(closes: List[float], period: int = 14) -> float:
     try:
@@ -116,7 +98,6 @@ def calculate_rsi_wilders(closes: List[float], period: int = 14) -> float:
     except:
         return 50.0
 
-
 def calculate_macd(closes: List[float], fast: int = 12, slow: int = 26, signal: int = 9) -> Dict:
     try:
         if not closes or len(closes) < slow:
@@ -137,7 +118,6 @@ def calculate_macd(closes: List[float], fast: int = 12, slow: int = 26, signal: 
         return {"macd": round(macd_line, 6), "signal": round(signal_line, 6), "histogram": round(histogram, 6), "direction": "bullish" if histogram > 0 else "bearish"}
     except:
         return {"macd": 0, "signal": 0, "histogram": 0, "direction": "neutral"}
-
 
 def calculate_stochastic(closes: List[float], highs: List[float], lows: List[float], period: int = 14) -> Dict:
     try:
@@ -161,7 +141,6 @@ def calculate_stochastic(closes: List[float], highs: List[float], lows: List[flo
     except:
         return {"k": 50, "d": 50, "signal": "neutral"}
 
-
 def calculate_cci(closes: List[float], period: int = 20) -> float:
     try:
         if not closes or len(closes) < period:
@@ -175,7 +154,6 @@ def calculate_cci(closes: List[float], period: int = 20) -> float:
         return round(cci, 2)
     except:
         return 0
-
 
 def calculate_vwap_session(candles: Union[List[Candle], List[Dict]]) -> float:
     try:
@@ -200,7 +178,6 @@ def calculate_vwap_session(candles: Union[List[Candle], List[Dict]]) -> float:
     except:
         return 0
 
-
 def get_vwap_levels(candles: Union[List[Candle], List[Dict]]) -> Dict:
     try:
         if not candles:
@@ -215,50 +192,39 @@ def get_vwap_levels(candles: Union[List[Candle], List[Dict]]) -> Dict:
     except:
         return {"daily": 0, "weekly": 0, "monthly": 0, "quarterly": 0, "yearly": 0}
 
-
-
 def calculate_atr(candles: Union[List[Candle], List[Dict]], period: int = 14) -> float:
     """Calculate Average True Range (ATR) for volatility-based stop loss"""
     try:
         if not candles or len(candles) < period + 1:
             return 0.0
-        
         true_ranges = []
         for i in range(1, len(candles)):
             high = get_value(candles[i], "high")
             low = get_value(candles[i], "low")
             prev_close = get_value(candles[i-1], "close")
-            
-            tr = max(
-                high - low,
-                abs(high - prev_close),
-                abs(low - prev_close)
-            )
+            tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
             true_ranges.append(tr)
-        
         if not true_ranges:
             return 0.0
-        
-        # Calculate ATR using Wilder's smoothing method
         atr = sum(true_ranges[:period]) / period
-        return {"ema_fast": 0, "ema_slow": 0, "rsi": 50, "macd": {"macd": 0, "signal": 0, "histogram": 0, "direction": "neutral"}, "stochastic": {"k": 50, "d": 50, "signal": "neutral"}, "cci": 0, "vwap": {"daily": 0, "weekly": 0, "monthly": 0, "quarterly": 0, "yearly": 0}, "atr": 0}
+        for i in range(period, len(true_ranges)):
             atr = ((atr * (period - 1)) + true_ranges[i]) / period
-        
         return round(atr, 2)
     except:
         return 0.0
+
 def ta_summary(candles: Union[List[Candle], List[Dict]]) -> Dict:
     try:
         if not candles or len(candles) < 50:
-            return {"ema_fast": 0, "ema_slow": 0, "rsi": 50, "macd": {"macd": 0, "signal": 0, "histogram": 0, "direction": "neutral"}, "stochastic": {"k": 50, "d": 50, "signal": "neutral"}, "cci": 0, "vwap": {"daily": 0, "weekly": 0, "monthly": 0, "quarterly": 0, "261
-            0}}
+            return {"ema_fast": 0, "ema_slow": 0, "rsi": 50, "macd": {"macd": 0, "signal": 0, "histogram": 0, "direction": "neutral"}, "stochastic": {"k": 50, "d": 50, "signal": "neutral"}, "cci": 0, "vwap": {"daily": 0, "weekly": 0, "monthly": 0, "quarterly": 0, "yearly": 0}, "atr": 0}
         closes = [get_value(c, "close") for c in candles]
         highs = [get_value(c, "high") for c in candles]
         lows = [get_value(c, "low") for c in candles]
         ema_fast = calculate_ema(closes, 20)
         ema_slow = calculate_ema(closes, 50)
         rsi = calculate_rsi_wilders(closes, period=14)
-                atr = calculate_atr(candles, period=14)
-        return {"ema_fast": round(ema_fast, 2), "ema_slow": round(ema_slow, 2), "rsi": round(rsi, 2), "macd": calculate_macd(closes), "stochastic": calculate_stochastic(closes, highs, lows), "cci": calculate_cci(closes), "vwap": get_vwap_levels(candles), "atr": atr}    except Exception as e:
+        atr = calculate_atr(candles, period=14)
+        return {"ema_fast": round(ema_fast, 2), "ema_slow": round(ema_slow, 2), "rsi": round(rsi, 2), "macd": calculate_macd(closes), "stochastic": calculate_stochastic(closes, highs, lows), "cci": calculate_cci(closes), "vwap": get_vwap_levels(candles), "atr": atr}
+    except Exception as e:
         print(f"Error in ta_summary: {e}")
-        return {"ema_fast": 0, "ema_slow": 0, "rsi": 50, "macd": {"macd": 0, "signal": 0, "histogram": 0, "direction": "neutral"}, "stochastic": {"k": 50, "d": 50, "signal": "neutral"}, "cci": 0, "vwap": {"daily": 0, "weekly": 0, "monthly": 0, "quarterly": 0, "yearly":, "atr": 0 0}}
+        return {"ema_fast": 0, "ema_slow": 0, "rsi": 50, "macd": {"macd": 0, "signal": 0, "histogram": 0, "direction": "neutral"}, "stochastic": {"k": 50, "d": 50, "signal": "neutral"}, "cci": 0, "vwap": {"daily": 0, "weekly": 0, "monthly": 0, "quarterly": 0, "yearly": 0}, "atr": 0}
