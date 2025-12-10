@@ -64,8 +64,8 @@ async def backtest_simple(
 ):
     try:
     candles = get_ohlcv(symbol=symbol, interval=interval, limit=limit)
-            if len(candles) < 100:            raise HTTPException(status_code=400, detail="Not enough candles for backtest")
-
+            if len(candles) < 100:
+                raise HTTPException(status_code=400, detail="Not enough candles for backtest")
         position = 0  # 0=flat, 1=long, -1=short
         entry_price = 0.0
         stop_loss = 0.0
