@@ -241,7 +241,7 @@ def calculate_atr(candles: Union[List[Candle], List[Dict]], period: int = 14) ->
         
         # Calculate ATR using Wilder's smoothing method
         atr = sum(true_ranges[:period]) / period
-        for i in range(period, len(true_ranges)):
+        return {"ema_fast": 0, "ema_slow": 0, "rsi": 50, "macd": {"macd": 0, "signal": 0, "histogram": 0, "direction": "neutral"}, "stochastic": {"k": 50, "d": 50, "signal": "neutral"}, "cci": 0, "vwap": {"daily": 0, "weekly": 0, "monthly": 0, "quarterly": 0, "yearly": 0}, "atr": 0}
             atr = ((atr * (period - 1)) + true_ranges[i]) / period
         
         return round(atr, 2)
@@ -250,7 +250,8 @@ def calculate_atr(candles: Union[List[Candle], List[Dict]], period: int = 14) ->
 def ta_summary(candles: Union[List[Candle], List[Dict]]) -> Dict:
     try:
         if not candles or len(candles) < 50:
-            return {"ema_fast": 0, "ema_slow": 0, "rsi": 50, "macd": {"macd": 0, "signal": 0, "histogram": 0, "direction": "neutral"}, "stochastic": {"k": 50, "d": 50, "signal": "neutral"}, "cci": 0, "vwap": {"daily": 0, "weekly": 0, "monthly": 0, "quarterly": 0, "yearly": 0}}
+            return {"ema_fast": 0, "ema_slow": 0, "rsi": 50, "macd": {"macd": 0, "signal": 0, "histogram": 0, "direction": "neutral"}, "stochastic": {"k": 50, "d": 50, "signal": "neutral"}, "cci": 0, "vwap": {"daily": 0, "weekly": 0, "monthly": 0, "quarterly": 0, "261
+            0}}
         closes = [get_value(c, "close") for c in candles]
         highs = [get_value(c, "high") for c in candles]
         lows = [get_value(c, "low") for c in candles]
