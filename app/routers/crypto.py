@@ -47,6 +47,7 @@ async def get_klines(symbol: str, interval: str):
 
 from fastapi import APIRouter, Query, HTTPException
 from app.services.binance_service import BinanceService
+from app.services.ta_engine import ta_summary, get_ohlcv
 from app.services.ta_engine import ta_summary
 from app.services.signal_engine import calculate_signal
 from app.services.volume_profile_engine import calculate_volume_profile, is_price_near_poc, get_volume_strength
@@ -62,8 +63,7 @@ async def backtest_simple(
     limit: int = Query(1000, ge=100, le=2000),
 ):
     try:
-        candles = binance_service.get_candles(symbol=symbol, interval=interval, limit=limit)
-        if len(candles) < 100:
+        candles = get_ohlcv(symbol=symbol, interval=interval, limit=limit)        if len(candles) < 100:
             raise HTTPException(status_code=400, detail="Not enough candles for backtest")
 
         position = 0  # 0=flat, 1=long, -1=short
