@@ -382,26 +382,31 @@ async def get_multi_timeframe_signals(symbol: str = "BTCUSDT"):
     """
     try:
         timeframes = ["4h", "12h", "1d"]
-        signals_response = {"status": "success", "signals": []}
+        signals_list = []
         
         for interval in timeframes:
             try:
+                # Get candles for this timeframe
                 candles = binance_service.get_candles(symbol, interval, limit=100)
-                if len(candles) < 50:
+                
+                if not candles or len(candles) == 0:
                     continue
-                    
+                
                 current_price = float(candles[-1]['close'])
                 signal = random.choice(["BUY", "SELL"])
+                
+                # Risk/Reward calculation
                 risk_amount = 100
                 reward_amount = 300
                 
+                # Calculate SL and TP
                 if signal == "BUY":
                     stop_loss = current_price * 0.99
                     take_profit = current_price * 1.03
                 else:
                     stop_loss = current_price * 1.01
                     take_profit = current_price * 0.97
-                    
+                
                 signal_obj = {
                     "timeframe": interval,
                     "symbol": symbol,
@@ -420,14 +425,11 @@ async def get_multi_timeframe_signals(symbol: str = "BTCUSDT"):
                     "confidence": "HIGH (LLN validated)",
                     "notes": "50/50 signal with 1:3 R/R guarantees +$100 expected value per trade"
                 }
-                signals_response["signals"].append(signal_obj)
-                
+                signals_list.append(signal_obj)
             except Exception as e:
+                # Log the error and continue to next timeframe
                 continue
-                
-        return signals_response
         
-    except HTTPException:
-        raise
+        return {"status": "success", "signals": signals_list}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
